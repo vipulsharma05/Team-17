@@ -1,4 +1,3 @@
-// server/index.js
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -7,7 +6,7 @@ const WebSocket = require('ws');
 const app = express();
 const PORT = 3001;
 
-// In-memory data store to mimic your original AppData
+// In-memory data store
 const AppData = {
     incidents: [
         { id: 1, name: "Family Trapped", coords: [19.115, 72.855], priority: "HIGH", time: new Date(), description: "Family of 4 trapped in flooded building", status: "active" },
@@ -23,9 +22,6 @@ const AppData = {
         { name: "Andheri Flooded", coords: [[19.120, 72.845], [19.120, 72.865], [19.110, 72.865], [19.110, 72.845]], alertLevel: "HIGH" },
         { name: "Bandra Flooded", coords: [[19.060, 72.810], [19.060, 72.830], [19.050, 72.830], [19.050, 72.810]], alertLevel: "MEDIUM" }
     ],
-    nonFloodedZones: [
-        { name: "Colaba Safe", coords: [[18.930, 72.810], [18.930, 72.840], [18.950, 72.840], [18.950, 72.810]] }
-    ],
     resources: [
         { name: "Medical Supplies", total: 500, distributed: 234, location: "Central Warehouse" },
         { name: "Food Packages", total: 1000, distributed: 456, location: "Multiple Shelters" },
@@ -37,8 +33,55 @@ const AppData = {
 app.use(cors());
 app.use(bodyParser.json());
 
+// New function to classify social media posts with a relevance score
+function triageSocialMediaPost(postText) {
+    const textLower = postText.toLowerCase();
+
+    // Define keywords and their weights
+    const keywords = {
+        rescue: ['trapped', 'stuck', 'help', 'rescue', 'emergency'],
+        food: ['food', 'water', 'hungry', 'thirsty', 'supplies'],
+        safe: ['safe', 'ok', 'okay'],
+        irrelevant: ['hello', 'hi', 'how are you', 'test']
+    };
+
+    let priority = 'LOW';
+    let category = 'Irrelevant';
+    let relevanceScore = 0;
+
+    // First, check for irrelevant keywords. If found, stop.
+    if (keywords.irrelevant.some(keyword => textLower.includes(keyword))) {
+        return { priority: 'LOW', category: 'Irrelevant', relevanceScore: 0 };
+    }
+
+    // If not irrelevant, check for other keywords and assign scores
+    if (keywords.rescue.some(keyword => textLower.includes(keyword))) {
+        relevanceScore = 3;
+        category = 'Needs Rescue';
+        priority = 'HIGH';
+    } else if (keywords.food.some(keyword => textLower.includes(keyword))) {
+        relevanceScore = 2;
+        category = 'Needs Food/Water';
+        priority = 'MEDIUM';
+    } else if (keywords.safe.some(keyword => textLower.includes(keyword))) {
+        relevanceScore = 1;
+        category = 'Safe';
+        priority = 'LOW';
+    }
+
+    return { priority, category, relevanceScore };
+}
+
 // API Endpoints
 app.get('/api/incidents', (req, res) => res.json(AppData.incidents));
+
+// NEW: Endpoint to delete all incidents
+app.delete('/api/incidents', (req, res) => {
+    AppData.incidents = []; // Clear the array
+    broadcastUpdate('incidents_cleared', { message: 'All incidents have been cleared.' });
+    res.status(200).json({ message: 'All incidents have been cleared.' });
+});
+
 app.post('/api/incidents', (req, res) => {
     const newIncident = { id: Date.now(), ...req.body, time: new Date(), status: 'active' };
     AppData.incidents.push(newIncident);
@@ -68,7 +111,35 @@ app.get('/api/weather', (req, res) => res.json({
     alerts: Math.random() > 0.7 ? ['Heavy rainfall expected'] : []
 }));
 
-// WebSocket Server
+// NEW: AI-Powered Triage Endpoint with improved filtering
+app.post('/api/triage-social-media', async (req, res) => {
+    const { postText } = req.body;
+    const { priority, category, relevanceScore } = triageSocialMediaPost(postText);
+    
+    // Set a relevance threshold to filter out irrelevant posts
+    const RELEVANCE_THRESHOLD = 1;
+
+    if (relevanceScore < RELEVANCE_THRESHOLD) {
+        // Post is not relevant, so we don't create an incident
+        return res.status(200).json({ message: 'Post classified as irrelevant and filtered.', incident: null });
+    }
+
+    const newIncident = {
+        id: Date.now(),
+        name: `Social Media Alert (${category})`,
+        coords: [19.0760 + (Math.random() - 0.5) * 0.1, 72.8777 + (Math.random() - 0.5) * 0.1],
+        priority,
+        description: `Post text: "${postText}"`,
+        status: 'active',
+        source: 'social_media',
+        relevanceScore
+    };
+
+    AppData.incidents.push(newIncident);
+    broadcastUpdate('social_media_triage', newIncident);
+    res.status(201).json({ message: 'Post classified and added as an incident.', incident: newIncident });
+});
+
 const wss = new WebSocket.Server({ port: 8080 });
 
 wss.on('connection', ws => {

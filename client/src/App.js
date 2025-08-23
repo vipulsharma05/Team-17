@@ -9,6 +9,7 @@ import Incidents from './components/Incidents';
 import Shelters from './components/Shelters';
 import Resources from './components/Resources';
 import GPSTracker from './components/GPSTracker';
+import SocialMediaTriage from './components/SocialMediaTriage'; // NEW IMPORT
 import './index.css';
 
 const App = () => {
@@ -19,6 +20,7 @@ const App = () => {
     const [apiStatus, setApiStatus] = useState('Initializing...');
     const [activePanel, setActivePanel] = useState('dashboard');
     const [liveAlerts, setLiveAlerts] = useState([]);
+    const [selectedIncident, setSelectedIncident] = useState(null);
 
     const fetchData = async () => {
         try {
@@ -34,7 +36,6 @@ const App = () => {
             setWeather(weatherRes.data);
             setApiStatus('Connected');
             
-            // Update live alerts based on new data
             const newAlerts = incidentsRes.data.filter(i => i.status === 'active');
             setLiveAlerts(newAlerts);
 
@@ -59,13 +60,18 @@ const App = () => {
     const handlePanelChange = (panelId) => {
         setActivePanel(panelId);
     };
+    
+    const handleAlertClick = (incident) => {
+        setActivePanel('map');
+        setSelectedIncident(incident);
+    };
 
     const renderPanel = () => {
         switch (activePanel) {
             case 'dashboard':
                 return <Dashboard incidents={incidents} shelters={shelters} resources={resources} weather={weather} />;
             case 'map':
-                return <LiveMap incidents={incidents} shelters={shelters} />;
+                return <LiveMap incidents={incidents} shelters={shelters} selectedIncident={selectedIncident} />;
             case 'incidents':
                 return <Incidents incidents={incidents} />;
             case 'shelters':
@@ -74,6 +80,8 @@ const App = () => {
                 return <Resources resources={resources} />;
             case 'gps-tracker':
                 return <GPSTracker />;
+            case 'social-media':
+                return <SocialMediaTriage />;
             default:
                 return <Dashboard incidents={incidents} shelters={shelters} resources={resources} weather={weather} />;
         }
@@ -86,7 +94,7 @@ const App = () => {
             <main className="main-content">
                 {renderPanel()}
             </main>
-            <RightPanel liveAlerts={liveAlerts} />
+            <RightPanel liveAlerts={liveAlerts} onAlertClick={handleAlertClick} />
         </div>
     );
 };

@@ -1,11 +1,13 @@
+// client/src/components/LiveMap.js
+
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, LayerGroup, Polygon, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, LayerGroup, Polygon, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import { formatTime } from '../utils';
 
-// Workaround for a react-leaflet bug
+// Workaround for a react-leaflet bug with marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
@@ -13,37 +15,47 @@ L.Icon.Default.mergeOptions({
     shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-// A custom component to handle location logic inside MapContainer
-const LocationMarker = ({ setLocationStatus, setUserLocation }) => {
-    const map = useMap();
-    
-    useEffect(() => {
-        setLocationStatus('Checking for location permission...');
-        map.locate().on("locationfound", function (e) {
-            setUserLocation(e.latlng);
-            map.flyTo(e.latlng, map.getZoom());
-            setLocationStatus('Location found!');
-        }).on("locationerror", function (e) {
-            setLocationStatus(`Location access denied: ${e.message}`);
-        });
-    }, [map, setLocationStatus, setUserLocation]);
-
-    return null;
-};
-
-const LiveMap = ({ incidents, shelters }) => {
-    const [map, setMap] = useState(null);
+const LiveMap = ({ incidents, shelters, selectedIncident }) => {
+    const [mapInstance, setMapInstance] = useState(null);
     const [showingIncidents, setShowingIncidents] = useState(true);
     const [showingShelters, setShowingShelters] = useState(true);
     const [showingFloodZones, setShowingFloodZones] = useState(true);
     const [userLocation, setUserLocation] = useState(null);
-    const [locationStatus, setLocationStatus] = useState('Waiting for location...');
+    const [locationStatus, setLocationStatus] = useState(null);
+
+    const MapEvents = () => {
+        const map = useMap();
+        useMapEvents({
+            click: (e) => {
+                if (window.confirm('Report incident at this location?')) {
+                    reportIncidentAtLocation(e.latlng);
+                }
+            },
+            locationfound: (e) => {
+                setUserLocation(e.latlng);
+                map.flyTo(e.latlng, map.getZoom());
+                setLocationStatus(null);
+            },
+            locationerror: (e) => {
+                setLocationStatus(`Location access denied: ${e.message}`);
+            },
+        });
+        
+        return null;
+    };
+
+    // NEW: Effect to pan the map to the selected incident
+    useEffect(() => {
+        if (selectedIncident && mapInstance) {
+            mapInstance.flyTo(selectedIncident.coords, 15);
+        }
+    }, [selectedIncident, mapInstance]);
 
     useEffect(() => {
-        if (map) {
-            map.invalidateSize();
+        if (mapInstance) {
+            mapInstance.invalidateSize();
         }
-    }, [map]);
+    }, [mapInstance]);
 
     const reportIncidentAtLocation = async (latlng) => {
         const incidentData = {
@@ -63,9 +75,9 @@ const LiveMap = ({ incidents, shelters }) => {
     };
     
     const getCurrentLocation = () => {
-        if (map) {
+        if (mapInstance) {
             setLocationStatus('Finding your location...');
-            map.locate({ setView: true, maxZoom: 15 });
+            mapInstance.locate({ setView: true, maxZoom: 15 });
         }
     };
 
@@ -103,18 +115,15 @@ const LiveMap = ({ incidents, shelters }) => {
                 center={[19.0760, 72.8777]}
                 zoom={12}
                 scrollWheelZoom={true}
-                whenCreated={setMap}
+                whenCreated={setMapInstance}
                 style={{ height: '100%', width: '100%' }}
-                onClick={(e) => {
-                    if (window.confirm('Report incident at this location?')) {
-                        reportIncidentAtLocation(e.latlng);
-                    }
-                }}
             >
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+
+                <MapEvents />
 
                 {showingIncidents && (
                     <LayerGroup>
@@ -165,7 +174,6 @@ const LiveMap = ({ incidents, shelters }) => {
                 )}
             </MapContainer>
             
-            {/* Left side options */}
             <div className="floating-controls">
                 <button className="control-btn" onClick={() => setShowingIncidents(!showingIncidents)}>📍 {showingIncidents ? 'Hide' : 'Show'} Incidents</button>
                 <button className="control-btn" onClick={() => setShowingShelters(!showingShelters)}>🏠 {showingShelters ? 'Hide' : 'Show'} Shelters</button>

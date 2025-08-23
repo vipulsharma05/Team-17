@@ -45,6 +45,14 @@ const Sidebar = ({ activePanel, onPanelChange }) => {
                 <div className="nav-icon">📍</div>
                 <span>GPS Tracker</span>
             </div>
+            {/* NEW: Social Media Triage Nav Link */}
+            <div 
+                className={`nav-item ${activePanel === 'social-media' ? 'active' : ''}`} 
+                onClick={() => onPanelChange('social-media')}
+            >
+                <div className="nav-icon">🤖</div>
+                <span>AI Triage</span>
+            </div>
         </nav>
     );
 };
