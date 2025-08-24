@@ -13,15 +13,24 @@ L.Icon.Default.mergeOptions({
     shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-const LiveMap = ({ incidents, shelters, selectedIncident }) => {
+const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = true }) => {
+    // Original state from first component
     const [mapInstance, setMapInstance] = useState(null);
     const [showingIncidents, setShowingIncidents] = useState(true);
     const [showingShelters, setShowingShelters] = useState(true);
     const [showingFloodZones, setShowingFloodZones] = useState(true);
     const [userLocation, setUserLocation] = useState(null);
     const [locationStatus, setLocationStatus] = useState(null);
+    
+    // Additional state from second component
+    const [floodPolygons, setFloodPolygons] = useState([]);
+    const [backendIncidents, setBackendIncidents] = useState([]);
+    const [resources, setResources] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [activeLayer, setActiveLayer] = useState('all');
+    const [showingResources, setShowingResources] = useState(true);
 
-    // MapEvents component to handle map interactions like click and location finding
     const MapEvents = () => {
         const map = useMapEvents({
             click: (e) => {
@@ -39,15 +48,10 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
             },
         });
         
-        // Pass the map instance to the parent component's state
-        useEffect(() => {
-            setMapInstance(map);
-        }, [map]);
-
         return null;
     };
 
-    // Effect to pan the map to the selected incident when the prop changes
+    // Effect to pan the map to the selected incident
     useEffect(() => {
         if (selectedIncident && mapInstance) {
             mapInstance.flyTo(selectedIncident.coords, 15);
@@ -59,6 +63,89 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
             mapInstance.invalidateSize();
         }
     }, [mapInstance]);
+
+    // ESC key handler for closing fullscreen map
+    useEffect(() => {
+        const handleEsc = (event) => {
+            if (event.keyCode === 27 && fullScreen) { // ESC key
+                if (onBack) {
+                    onBack();
+                } else {
+                    window.history.back();
+                }
+            }
+        };
+        
+        if (fullScreen) {
+            document.addEventListener('keydown', handleEsc, false);
+            return () => {
+                document.removeEventListener('keydown', handleEsc, false);
+            };
+        }
+    }, [fullScreen, onBack]);
+
+    // Load data from backend (second component functionality)
+    useEffect(() => {
+        Promise.all([
+            fetchFloodData(),
+            fetchBackendIncidents(),
+            fetchResources()
+        ]).finally(() => {
+            setLoading(false);
+        });
+    }, []);
+
+    const fetchFloodData = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/get_flood_polygons');
+            if (!response.ok) {
+                throw new Error('Failed to fetch flood data');
+            }
+            const data = await response.json();
+            console.log('Flood data:', data);
+
+            // Convert GeoJSON coordinates for Leaflet (swap lat/lng)
+            const coords = data.features.map((feature, index) => ({
+                id: index,
+                positions: feature.geometry.coordinates[0].map(coord => [coord[1], coord[0]]),
+                properties: feature.properties || {}
+            }));
+            console.log("Converted polygons:", coords);
+            
+            setFloodPolygons(coords);
+        } catch (err) {
+            console.error('Error fetching flood data:', err);
+            setError(prev => prev || err.message);
+        }
+    };
+
+    const fetchBackendIncidents = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/api/incidents');
+            if (response.ok) {
+                const data = await response.json();
+                setBackendIncidents(data.incidents || []);
+            }
+        } catch (err) {
+            console.error('Failed to fetch backend incidents:', err);
+        }
+    };
+
+    const fetchResources = async () => {
+        try {
+            const response = await fetch('http://localhost:5000/api/resources');
+            if (response.ok) {
+                const data = await response.json();
+                // Filter resources that have location coordinates
+                const resourcesWithLocation = data.resources.filter(resource => 
+                    resource.lat && resource.lng
+                );
+                setResources(resourcesWithLocation);
+            }
+        } catch (err) {
+            console.error('Failed to fetch resources:', err);
+        }
+    };
 
     const reportIncidentAtLocation = async (latlng) => {
         const incidentData = {
@@ -84,26 +171,6 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
         }
     };
 
-    const incidentIcon = L.divIcon({
-        className: 'sos-icon',
-        html: '<div style="animation: blink 1s infinite; color: red; font-weight: bold; font-size: 24px;">🚨</div>',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-    });
-    
-    // Create a custom icon for the selected incident
-    const selectedIcon = L.divIcon({
-        className: 'selected-icon',
-        html: '<div style="animation: bounce 1s infinite; font-size: 32px; color: yellow;">📍</div>',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
-    });
-
-    const floodZoneData = [
-        { name: "Andheri Flooded", coords: [[19.120, 72.845], [19.120, 72.865], [19.110, 72.865], [19.110, 72.845]], alertLevel: "HIGH" },
-        { name: "Bandra Flooded", coords: [[19.060, 72.810], [19.060, 72.830], [19.050, 72.830], [19.050, 72.810]], alertLevel: "MEDIUM" }
-    ];
-
     const addNewIncident = async () => {
         const incidentData = {
             name: `Emergency ${Date.now()}`,
@@ -121,95 +188,708 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
         }
     };
 
+    const toggleLayer = (layerType) => {
+        setActiveLayer(layerType);
+    };
+
+    // Custom icons
+    const incidentIcon = L.divIcon({
+        className: 'sos-icon',
+        html: '<div style="animation: blink 1s infinite; color: red; font-weight: bold; font-size: 24px;">🚨</div>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+    });
+    
+    const selectedIcon = L.divIcon({
+        className: 'selected-icon',
+        html: '<div style="animation: bounce 1s infinite; font-size: 32px; color: yellow;">📍</div>',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32]
+    });
+
+    // Original flood zone data (fallback)
+    const floodZoneData = [
+        { name: "Andheri Flooded", coords: [[19.120, 72.845], [19.120, 72.865], [19.110, 72.865], [19.110, 72.845]], alertLevel: "HIGH" },
+        { name: "Bandra Flooded", coords: [[19.060, 72.810], [19.060, 72.830], [19.050, 72.830], [19.050, 72.810]], alertLevel: "MEDIUM" }
+    ];
+
+    if (loading) {
+        return (
+            <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                zIndex: 2000
+            }}>
+                <div style={{
+                    width: '60px',
+                    height: '60px',
+                    border: '4px solid rgba(255,255,255,0.3)',
+                    borderTop: '4px solid white',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '20px'
+                }}></div>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '24px' }}>Loading Mumbai Flood Map...</h3>
+                <p style={{ margin: 0, fontSize: '16px', opacity: 0.8 }}>Fetching real-time data...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)',
+                color: 'white',
+                zIndex: 2000,
+                padding: '20px'
+            }}>
+                <div style={{ fontSize: '60px', marginBottom: '20px' }}>⚠️</div>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '24px' }}>Unable to Load Map Data</h3>
+                <p style={{ margin: '0 0 20px 0', fontSize: '16px', opacity: 0.9, textAlign: 'center' }}>{error}</p>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        style={{
+                            padding: '10px 20px',
+                            background: 'rgba(255,255,255,0.2)',
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                    >
+                        Reload Page
+                    </button>
+                    <button 
+                        onClick={() => setError(null)} 
+                        style={{
+                            padding: '10px 20px',
+                            background: 'rgba(255,255,255,0.2)',
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                    >
+                        Dismiss Error
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    const allIncidents = incidents || [];
+    const totalIncidents = allIncidents.length + backendIncidents.length;
+
     return (
-        <div className="content-panel active" id="map">
-            <MapContainer
-                center={[19.0760, 72.8777]}
-                zoom={12}
-                scrollWheelZoom={true}
-                whenCreated={setMapInstance}
-                style={{ height: '100%', width: '100%' }}
-            >
-                <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+        <div style={{ 
+            position: fullScreen ? 'fixed' : 'relative', 
+            top: fullScreen ? 0 : 'auto', 
+            left: fullScreen ? 0 : 'auto', 
+            right: fullScreen ? 0 : 'auto', 
+            bottom: fullScreen ? 0 : 'auto', 
+            zIndex: fullScreen ? 1000 : 'auto',
+            backgroundColor: '#f8f9fa',
+            display: 'flex',
+            flexDirection: 'column',
+            height: fullScreen ? '100vh' : '600px',
+            width: fullScreen ? '100vw' : '100%'
+        }}>
+            {/* Map Header with Controls */}
+            <div style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                padding: '1rem 2rem',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                zIndex: fullScreen ? 1001 : 'auto'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        {/* Close/Back Button - Always show when fullScreen */}
+                        {(onBack || fullScreen) && (
+                            <button 
+                                onClick={onBack || (() => window.history.back())}
+                                style={{
+                                    padding: '0.75rem',
+                                    background: 'rgba(255,255,255,0.2)',
+                                    border: 'none',
+                                    borderRadius: '50%',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '18px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.3s ease',
+                                    backdropFilter: 'blur(10px)',
+                                    width: '45px',
+                                    height: '45px'
+                                }}
+                                onMouseOver={(e) => {
+                                    e.target.style.background = 'rgba(255,255,255,0.3)';
+                                    e.target.style.transform = 'translateX(-2px)';
+                                }}
+                                onMouseOut={(e) => {
+                                    e.target.style.background = 'rgba(255,255,255,0.2)';
+                                    e.target.style.transform = 'translateX(0)';
+                                }}
+                                title={fullScreen ? "Close Map" : "Back to Dashboard"}
+                            >
+                                {fullScreen ? '✕' : '←'}
+                            </button>
+                        )}
+                        
+                        <div>
+                            <h1 style={{ margin: 0, fontSize: fullScreen ? '1.75rem' : '1.5rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                🗺️ Mumbai Disaster Response Map
+                            </h1>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                <span style={{
+                                    background: 'rgba(255,255,255,0.2)', 
+                                    backdropFilter: 'blur(10px)',
+                                    color: 'white', 
+                                    padding: '0.25rem 0.75rem', 
+                                    borderRadius: '20px', 
+                                    fontSize: '0.875rem',
+                                    fontWeight: '500'
+                                }}>
+                                    🌊 {floodPolygons.length + floodZoneData.length} Flood Zones
+                                </span>
+                                <span style={{
+                                    background: 'rgba(255,255,255,0.2)', 
+                                    backdropFilter: 'blur(10px)',
+                                    color: 'white', 
+                                    padding: '0.25rem 0.75rem', 
+                                    borderRadius: '20px', 
+                                    fontSize: '0.875rem',
+                                    fontWeight: '500'
+                                }}>
+                                    ⚠️ {totalIncidents} Active Incidents
+                                </span>
+                                <span style={{
+                                    background: 'rgba(255,255,255,0.2)', 
+                                    backdropFilter: 'blur(10px)',
+                                    color: 'white', 
+                                    padding: '0.25rem 0.75rem', 
+                                    borderRadius: '20px', 
+                                    fontSize: '0.875rem',
+                                    fontWeight: '500'
+                                }}>
+                                    📦 {resources.length + (shelters?.length || 0)} Resources
+                                </span>
+                            </div>
+                        </div>
+                    </div>
 
-                <MapEvents />
+                    {/* Layer Toggle Controls */}
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button 
+                            style={{
+                                padding: '0.5rem 1rem',
+                                border: 'none',
+                                borderRadius: '25px',
+                                background: activeLayer === 'floods' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.2)',
+                                color: activeLayer === 'floods' ? '#667eea' : 'white',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                transition: 'all 0.3s ease',
+                                backdropFilter: 'blur(10px)'
+                            }}
+                            onClick={() => toggleLayer('floods')}
+                            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+                            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                        >
+                            🌊 Flood Zones
+                        </button>
+                        <button 
+                            style={{
+                                padding: '0.5rem 1rem',
+                                border: 'none',
+                                borderRadius: '25px',
+                                background: activeLayer === 'incidents' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.2)',
+                                color: activeLayer === 'incidents' ? '#667eea' : 'white',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                transition: 'all 0.3s ease',
+                                backdropFilter: 'blur(10px)'
+                            }}
+                            onClick={() => toggleLayer('incidents')}
+                            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+                            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                        >
+                            ⚠️ Incidents
+                        </button>
+                        <button 
+                            style={{
+                                padding: '0.5rem 1rem',
+                                border: 'none',
+                                borderRadius: '25px',
+                                background: activeLayer === 'all' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.2)',
+                                color: activeLayer === 'all' ? '#667eea' : 'white',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                transition: 'all 0.3s ease',
+                                backdropFilter: 'blur(10px)'
+                            }}
+                            onClick={() => toggleLayer('all')}
+                            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+                            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                        >
+                            📍 All Layers
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-                {showingIncidents && (
-                    <LayerGroup>
-                        {incidents.filter(i => i.status === 'active').map(incident => (
-                            <Marker key={incident.id} position={incident.coords} icon={incidentIcon}>
+            <div style={{ flex: 1, position: 'relative' }}>
+                <MapContainer
+                    center={[19.0760, 72.8777]}
+                    zoom={12}
+                    scrollWheelZoom={true}
+                    whenCreated={setMapInstance}
+                    style={{ height: '100%', width: '100%' }}
+                    className="leaflet-container"
+                >
+                    <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+
+                    <MapEvents />
+
+                    {/* Props-based incidents (original functionality) */}
+                    {showingIncidents && (activeLayer === 'incidents' || activeLayer === 'all') && (
+                        <LayerGroup>
+                            {allIncidents.filter(i => i.status === 'active').map(incident => (
+                                <Marker key={incident.id} position={incident.coords} icon={incidentIcon}>
+                                    <Popup>
+                                        <b>{incident.name}</b><br/>
+                                        <b>Priority:</b> {incident.priority}<br/>
+                                        {incident.description}<br/>
+                                        <b>Time:</b> {formatTime(incident.time)}
+                                    </Popup>
+                                </Marker>
+                            ))}
+                        </LayerGroup>
+                    )}
+
+                    {/* Backend incidents (second component functionality) */}
+                    {(activeLayer === 'incidents' || activeLayer === 'all') && 
+                        backendIncidents.map((incident) => (
+                            <Marker 
+                                key={`backend-incident-${incident.id}`}
+                                position={[incident.lat, incident.lng]}
+                            >
                                 <Popup>
-                                    <b>{incident.name}</b><br/>
-                                    <b>Priority:</b> {incident.priority}<br/>
-                                    {incident.description}<br/>
-                                    <b>Time:</b> {formatTime(incident.time)}
+                                    <div className="popup-content">
+                                        <h4>⚠️ {incident.title}</h4>
+                                        <p>{incident.description}</p>
+                                        <p><strong>Status:</strong> 
+                                            <span className={`status ${incident.status}`}>
+                                                {incident.status.toUpperCase()}
+                                            </span>
+                                        </p>
+                                        <p><strong>Severity:</strong> 
+                                            <span className={`severity ${incident.severity}`}>
+                                                {incident.severity.toUpperCase()}
+                                            </span>
+                                        </p>
+                                    </div>
                                 </Popup>
                             </Marker>
-                        ))}
-                    </LayerGroup>
-                )}
+                        ))
+                    }
 
-                {/* Highlighted marker for the selected incident */}
-                {selectedIncident && (
-                    <Marker key={`selected-${selectedIncident.id}`} position={selectedIncident.coords} icon={selectedIcon}>
-                        <Popup>
-                            <b>SELECTED: {selectedIncident.name}</b><br/>
-                            <b>Priority:</b> {selectedIncident.priority}<br/>
-                            {selectedIncident.description}<br/>
-                            <b>Time:</b> {formatTime(selectedIncident.time)}
-                        </Popup>
-                    </Marker>
-                )}
+                    {/* Selected incident marker */}
+                    {selectedIncident && (
+                        <Marker key={`selected-${selectedIncident.id}`} position={selectedIncident.coords} icon={selectedIcon}>
+                            <Popup>
+                                <b>SELECTED: {selectedIncident.name}</b><br/>
+                                <b>Priority:</b> {selectedIncident.priority}<br/>
+                                {selectedIncident.description}<br/>
+                                <b>Time:</b> {formatTime(selectedIncident.time)}
+                            </Popup>
+                        </Marker>
+                    )}
 
-                {showingShelters && (
-                    <LayerGroup>
-                        {shelters.map(shelter => (
-                            <Marker key={shelter.id} position={shelter.coords}>
+                    {/* Props-based shelters (original functionality) */}
+                    {showingShelters && (activeLayer === 'all') && shelters && (
+                        <LayerGroup>
+                            {shelters.map(shelter => (
+                                <Marker key={shelter.id} position={shelter.coords}>
+                                    <Popup>
+                                        <b>{shelter.name}</b><br/>
+                                        <b>Capacity:</b> {shelter.current}/{shelter.capacity}<br/>
+                                        <b>Supplies:</b> {shelter.supplies.join(", ")}
+                                    </Popup>
+                                </Marker>
+                            ))}
+                        </LayerGroup>
+                    )}
+
+                    {/* Backend resources (second component functionality) */}
+                    {showingResources && (activeLayer === 'all') && 
+                        resources.map((resource) => (
+                            <Marker 
+                                key={`resource-${resource.id}`}
+                                position={[resource.lat, resource.lng]}
+                            >
                                 <Popup>
-                                    <b>{shelter.name}</b><br/>
-                                    <b>Capacity:</b> {shelter.current}/{shelter.capacity}<br/>
-                                    <b>Supplies:</b> {shelter.supplies.join(", ")}
+                                    <div className="popup-content">
+                                        <h4>📦 {resource.name}</h4>
+                                        <p><strong>Type:</strong> {resource.type}</p>
+                                        <p><strong>Status:</strong> 
+                                            <span className={`status ${resource.status}`}>
+                                                {resource.status.toUpperCase()}
+                                            </span>
+                                        </p>
+                                        <p><strong>Location:</strong> {resource.location}</p>
+                                        <p><strong>Quantity:</strong> {resource.quantity}</p>
+                                    </div>
                                 </Popup>
                             </Marker>
-                        ))}
-                    </LayerGroup>
-                )}
+                        ))
+                    }
 
-                {showingFloodZones && (
-                    <LayerGroup>
-                        {floodZoneData.map(zone => (
-                            <Polygon key={zone.name} positions={zone.coords} pathOptions={{ color: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', fillColor: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', fillOpacity: 0.6, weight: 2 }}>
+                    {/* Backend flood polygons */}
+                    {showingFloodZones && (activeLayer === 'floods' || activeLayer === 'all') && 
+                        floodPolygons.map((floodZone) => (
+                            <Polygon 
+                                key={`flood-${floodZone.id}`}
+                                positions={floodZone.positions} 
+                                pathOptions={{ 
+                                    color: '#ff4444', 
+                                    fillColor: '#ff6666',
+                                    fillOpacity: 0.4,
+                                    weight: 2,
+                                    opacity: 0.8
+                                }}
+                            >
                                 <Popup>
-                                    <b>Flooded Area: {zone.name}</b><br/>
-                                    <b>Alert Level:</b> {zone.alertLevel}
+                                    <div className="popup-content">
+                                        <h4>🌊 Flood Zone #{floodZone.id + 1}</h4>
+                                        <p><strong>Risk Level:</strong> High</p>
+                                        <p><strong>Type:</strong> Urban Flooding</p>
+                                        <p><strong>Last Updated:</strong> {new Date().toLocaleString()}</p>
+                                    </div>
                                 </Popup>
                             </Polygon>
-                        ))}
-                    </LayerGroup>
+                        ))
+                    }
+
+                    {/* Original flood zones (fallback) */}
+                    {showingFloodZones && (activeLayer === 'floods' || activeLayer === 'all') && (
+                        <LayerGroup>
+                            {floodZoneData.map(zone => (
+                                <Polygon 
+                                    key={zone.name} 
+                                    positions={zone.coords} 
+                                    pathOptions={{ 
+                                        color: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', 
+                                        fillColor: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', 
+                                        fillOpacity: 0.6, 
+                                        weight: 2 
+                                    }}
+                                >
+                                    <Popup>
+                                        <b>Flooded Area: {zone.name}</b><br/>
+                                        <b>Alert Level:</b> {zone.alertLevel}
+                                    </Popup>
+                                </Polygon>
+                            ))}
+                        </LayerGroup>
+                    )}
+
+                    {/* User location marker */}
+                    {userLocation && (
+                        <Marker position={userLocation}>
+                            <Popup>Your current location</Popup>
+                        </Marker>
+                    )}
+                </MapContainer>
+                
+                {/* Additional Quick Actions - Only show in fullScreen mode */}
+                {fullScreen && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        zIndex: 1000
+                    }}>
+                        {/* ESC key hint */}
+                        <div style={{
+                            padding: '8px 12px',
+                            background: 'rgba(0,0,0,0.7)',
+                            color: 'white',
+                            borderRadius: '20px',
+                            fontSize: '12px',
+                            backdropFilter: 'blur(10px)',
+                            opacity: 0.8
+                        }}>
+                            Press ESC to close
+                        </div>
+                    </div>
                 )}
 
-                {userLocation && (
-                    <Marker position={userLocation}>
-                        <Popup>Your current location</Popup>
-                    </Marker>
-                )}
-            </MapContainer>
-            
-            <div className="floating-controls">
-                <button className="control-btn" onClick={() => setShowingIncidents(!showingIncidents)}>📍 {showingIncidents ? 'Hide' : 'Show'} Incidents</button>
-                <button className="control-btn" onClick={() => setShowingShelters(!showingShelters)}>🏠 {showingShelters ? 'Hide' : 'Show'} Shelters</button>
-                <button className="control-btn" onClick={() => setShowingFloodZones(!showingFloodZones)}>🌊 {showingFloodZones ? 'Hide' : 'Show'} Flood Zones</button>
-                <button className="control-btn" onClick={addNewIncident}>➕ Add Incident</button>
-                <button className="control-btn" onClick={getCurrentLocation}>📍 My Location</button>
-            </div>
-            {locationStatus && (
-                <div style={{ position: 'absolute', bottom: '10px', left: '10px', backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '5px 10px', borderRadius: '5px', zIndex: 1000 }}>
-                    {locationStatus}
+                {/* Floating controls (original functionality) */}
+                <div style={{
+                    position: 'absolute',
+                    top: '20px',
+                    right: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    zIndex: 1000
+                }}>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: showingIncidents ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={() => setShowingIncidents(!showingIncidents)}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        📍 {showingIncidents ? 'Hide' : 'Show'} Incidents
+                    </button>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: showingShelters ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={() => setShowingShelters(!showingShelters)}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        🏠 {showingShelters ? 'Hide' : 'Show'} Shelters
+                    </button>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: showingFloodZones ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={() => setShowingFloodZones(!showingFloodZones)}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        🌊 {showingFloodZones ? 'Hide' : 'Show'} Flood Zones
+                    </button>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: showingResources ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={() => setShowingResources(!showingResources)}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        📦 {showingResources ? 'Hide' : 'Show'} Resources
+                    </button>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: 'linear-gradient(135deg, #ff6b6b, #ee5a52)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={addNewIncident}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        ➕ Add Incident
+                    </button>
+                    <button 
+                        style={{
+                            padding: '10px 15px',
+                            background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={getCurrentLocation}
+                        onMouseOver={(e) => {e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'}}
+                        onMouseOut={(e) => {e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'}}
+                    >
+                        📍 My Location
+                    </button>
                 </div>
-            )}
+
+                {/* Location status */}
+                {locationStatus && (
+                    <div style={{ 
+                        position: 'absolute', 
+                        bottom: '20px', 
+                        left: '20px', 
+                        background: 'rgba(0,0,0,0.8)', 
+                        color: 'white', 
+                        padding: '10px 20px', 
+                        borderRadius: '25px', 
+                        zIndex: 1000,
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                        backdropFilter: 'blur(10px)'
+                    }}>
+                        {locationStatus}
+                    </div>
+                )}
+
+                {/* Map Legend */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    right: '20px',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(10px)',
+                    padding: '20px',
+                    borderRadius: '15px',
+                    boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                    zIndex: 1000,
+                    minWidth: '250px'
+                }}>
+                    <h4 style={{ margin: '0 0 15px 0', color: '#333', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🗺️ Map Legend
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                                width: '20px',
+                                height: '20px',
+                                background: 'linear-gradient(135deg, #ff4444, #ff6666)',
+                                borderRadius: '4px',
+                                border: '2px solid #ff4444'
+                            }}></div>
+                            <span style={{ fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                                Flood Risk Areas ({floodPolygons.length + floodZoneData.length})
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                                width: '20px',
+                                height: '20px',
+                                background: 'linear-gradient(135deg, #ffc107, #ffeb3b)',
+                                borderRadius: '50%',
+                                border: '2px solid #ffc107'
+                            }}></div>
+                            <span style={{ fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                                Active Incidents ({totalIncidents})
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                                width: '20px',
+                                height: '20px',
+                                background: 'linear-gradient(135deg, #28a745, #20c997)',
+                                borderRadius: '4px',
+                                border: '2px solid #28a745'
+                            }}></div>
+                            <span style={{ fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                                Emergency Resources ({resources.length + (shelters?.length || 0)})
+                            </span>
+                        </div>
+                    </div>
+                    
+                    {/* Real-time Status */}
+                    <div style={{ 
+                        marginTop: '15px', 
+                        paddingTop: '15px', 
+                        borderTop: '1px solid #eee',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px' 
+                    }}>
+                        <div style={{
+                            width: '8px',
+                            height: '8px',
+                            background: '#28a745',
+                            borderRadius: '50%',
+                            animation: 'pulse 2s infinite'
+                        }}></div>
+                        <span style={{ fontSize: '14px', color: '#28a745', fontWeight: '500' }}>
+                            Real-time Updates Active
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
