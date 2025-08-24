@@ -21,6 +21,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
     const [userLocation, setUserLocation] = useState(null);
     const [locationStatus, setLocationStatus] = useState(null);
 
+    // MapEvents component to handle map interactions like click and location finding
     const MapEvents = () => {
         const map = useMapEvents({
             click: (e) => {
@@ -38,10 +39,15 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
             },
         });
         
+        // Pass the map instance to the parent component's state
+        useEffect(() => {
+            setMapInstance(map);
+        }, [map]);
+
         return null;
     };
-    
-    // NEW: Effect to pan the map to the selected incident
+
+    // Effect to pan the map to the selected incident when the prop changes
     useEffect(() => {
         if (selectedIncident && mapInstance) {
             mapInstance.flyTo(selectedIncident.coords, 15);
@@ -146,7 +152,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
                     </LayerGroup>
                 )}
 
-                {/* NEW: Highlighted marker for the selected incident */}
+                {/* Highlighted marker for the selected incident */}
                 {selectedIncident && (
                     <Marker key={`selected-${selectedIncident.id}`} position={selectedIncident.coords} icon={selectedIcon}>
                         <Popup>

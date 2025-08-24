@@ -405,3 +405,26 @@ body {
     font-size: 12px;
     z-index: 1000;
 }
+
+/* New CSS for custom map markers */
+.custom-selected-marker {
+    font-size: 24px;
+    color: #ff0000;
+    text-shadow: 0 0 5px #fff;
+    animation: pulse 1s infinite alternate;
+}
+
+.custom-incident-marker {
+    font-size: 20px;
+    color: #007bff;
+}
+
+.custom-shelter-marker {
+    font-size: 20px;
+    color: #28a745;
+}
+
+@keyframes pulse {
+    from { transform: scale(1); }
+    to { transform: scale(1.2); }
+}

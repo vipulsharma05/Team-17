@@ -50,7 +50,6 @@ const App = () => {
         fetchData();
         const interval = setInterval(fetchData, 30000); 
         
-        // Fixed: Changed from port 8080 to 3001
         const ws = new WebSocket('ws://localhost:3001');
         
         ws.onopen = () => {
@@ -92,7 +91,7 @@ const App = () => {
             case 'map':
                 return <LiveMap incidents={incidents} shelters={shelters} selectedIncident={selectedIncident} />;
             case 'incidents':
-                return <Incidents incidents={incidents} />;
+                return <Incidents incidents={incidents} onAlertClick={handleAlertClick} />;
             case 'shelters':
                 return <Shelters shelters={shelters} />;
             case 'resources':

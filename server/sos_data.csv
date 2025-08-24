@@ -1,0 +1,5 @@
+timestamp,msg_text,id,latitude,longitude
+2025-08-25T08:00:00Z,"We are trapped in a building due to the flood. Please send help now! We're at the address provided.",sos_001,19.0811,72.8856
+2025-08-25T08:05:00Z,"We have enough supplies and are safe in the shelter. Thank you!",sos_002,19.0700,72.8701
+2025-08-25T08:10:00Z,"Ran out of food and water. We have three children and are stranded.",sos_003,19.0654,72.8805
+2025-08-25T08:15:00Z,"Lost my cat, if anyone sees it, please contact me.",sos_004,19.0789,72.8763

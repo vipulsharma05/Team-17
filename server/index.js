@@ -4,6 +4,9 @@ const bodyParser = require('body-parser');
 const WebSocket = require('ws');
 const http = require('http');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const csv = require('csv-parser');
 
 // Replace with your actual API key from NewsAPI.org
 const NEWS_API_KEY = '6bffea9aebe4569861060dc97f9d803';
@@ -127,6 +130,8 @@ app.get('/api/weather', (req, res) => res.json({
 
 app.post('/api/triage-social-media', async (req, res) => {
     const { postText } = req.body;
+    // Note: The original code used a simple function. The new plan uses a separate AI service.
+    // Let's use the provided code logic for now, as it's self-contained.
     const { priority, category, relevanceScore } = triageSocialMediaPost(postText);
     const RELEVANCE_THRESHOLD = 1;
     
@@ -172,6 +177,60 @@ app.post('/api/chats/:chatId/messages', (req, res) => {
     broadcastUpdate('chat_message', { chatId, message: newMessage });
     res.status(201).json(newMessage);
 });
+
+// --- NEW LOGIC FOR CSV ALERTS ---
+async function processSosCsv() {
+    const filePath = path.join(__dirname, 'sos_data.csv');
+    if (!fs.existsSync(filePath)) {
+        console.error('sos_data.csv not found!');
+        return;
+    }
+
+    const stream = fs.createReadStream(filePath).pipe(csv());
+
+    for await (const row of stream) {
+        try {
+            // Use the local triage function, as the AI service is not part of this file
+            const { priority, category, relevanceScore } = triageSocialMediaPost(row.msg_text);
+
+            // A threshold to filter irrelevant messages
+            const RELEVANCE_THRESHOLD = 1;
+            if (relevanceScore < RELEVANCE_THRESHOLD) {
+                continue; // Skip irrelevant entries
+            }
+
+            // Check for duplicate incidents
+            const existingIncident = AppData.incidents.find(i => i.id === row.id);
+            if (!existingIncident) {
+                const newIncident = {
+                    id: row.id,
+                    name: `SOS Alert (${category})`,
+                    coords: [parseFloat(row.latitude), parseFloat(row.longitude)],
+                    priority: priority,
+                    description: `Text: "${row.msg_text}"`,
+                    source: 'csv',
+                    status: 'active',
+                    time: new Date(row.timestamp).toISOString()
+                };
+                AppData.incidents.push(newIncident);
+                broadcastUpdate('incident_update', newIncident);
+                console.log(`Created new incident from CSV: ${newIncident.id}`);
+            }
+        } catch (error) {
+            console.error(`Failed to process CSV row ${row.id}:`, error);
+        }
+    }
+}
+
+// Add a new endpoint to trigger the CSV processing manually
+app.get('/api/process-sos-csv', async (req, res) => {
+    await processSosCsv();
+    res.send({ message: 'CSV processing triggered successfully.' });
+});
+
+// Run this function automatically every 30 seconds to simulate new alerts
+setInterval(processSosCsv, 30000);
+// --- END OF NEW LOGIC ---
 
 // News API polling function
 async function pollNewsAPI() {
@@ -272,10 +331,10 @@ server.listen(PORT, () => {
     console.log(`🚀 Express server running on http://localhost:${PORT}`);
     console.log(`🔌 WebSocket server running on ws://localhost:${PORT}`);
     console.log(`📊 API endpoints available:`);
-    console.log(`   - GET  /api/incidents`);
-    console.log(`   - POST /api/incidents`);
-    console.log(`   - GET  /api/volunteers`);
-    console.log(`   - GET  /api/chats/:chatId/messages`);
-    console.log(`   - POST /api/chats/:chatId/messages`);
-    console.log(`   - And more...`);
+    console.log(`  - GET  /api/incidents`);
+    console.log(`  - POST /api/incidents`);
+    console.log(`  - GET  /api/volunteers`);
+    console.log(`  - GET  /api/chats/:chatId/messages`);
+    console.log(`  - POST /api/chats/:chatId/messages`);
+    console.log(`  - And more...`);
 });

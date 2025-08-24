@@ -1,0 +1,27 @@
+1756069666940,Social Media Alert (Needs Food/Water),"19.092015450306352,72.84002508506667",MEDIUM,"Post text: ""i want water supply""",social_media,active,2,Needs Food/Water,1756069666941
+1756069728076,Emergency 1756069728063,"19.086832012313888,72.91640961375786",LOW,Simulated emergency incident,simulation,active,1756069728076
+1756070796866,Social Media Alert (Needs Rescue),"19.02806979030804,72.90812944005383",HIGH,"Post text: ""i am stuck""",social_media,active,3,Needs Rescue,1756070796866
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070801051
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070801051
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070801051
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070801051
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070831052
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070831052
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070831052
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070831052
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070861070
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070861070
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070861070
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070861070
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070891067
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070891067
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070891067
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070891067
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070921080
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070921080
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070921080
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070921080
+sos_001,SOS Alert (Needs Rescue),"19.0811,72.8856",HIGH,"Text: ""We are trapped in a building due to the flood. Please send help now! We're at the address provided.""",csv,active,3,Needs Rescue,1756070951080
+sos_002,SOS Alert (Needs Food/Water),"19.07,72.8701",MEDIUM,"Text: ""We have enough supplies and are safe in the shelter. Thank you!""",csv,active,2,Needs Food/Water,1756070951080
+sos_003,SOS Alert (Irrelevant),"19.0654,72.8805",LOW,"Text: ""Ran out of food and water. We have three children and are stranded.""",csv,active,0,Irrelevant,1756070951080
+sos_004,SOS Alert (Irrelevant),"19.0789,72.8763",LOW,"Text: ""Lost my cat, if anyone sees it, please contact me.""",csv,active,0,Irrelevant,1756070951080
