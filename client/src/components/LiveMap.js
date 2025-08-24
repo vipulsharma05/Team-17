@@ -1,7 +1,5 @@
-// client/src/components/LiveMap.js
-
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, LayerGroup, Polygon, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, LayerGroup, Polygon, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
@@ -24,8 +22,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
     const [locationStatus, setLocationStatus] = useState(null);
 
     const MapEvents = () => {
-        const map = useMap();
-        useMapEvents({
+        const map = useMapEvents({
             click: (e) => {
                 if (window.confirm('Report incident at this location?')) {
                     reportIncidentAtLocation(e.latlng);
@@ -43,7 +40,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
         
         return null;
     };
-
+    
     // NEW: Effect to pan the map to the selected incident
     useEffect(() => {
         if (selectedIncident && mapInstance) {
@@ -87,6 +84,14 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
         iconSize: [30, 30],
         iconAnchor: [15, 15]
     });
+    
+    // Create a custom icon for the selected incident
+    const selectedIcon = L.divIcon({
+        className: 'selected-icon',
+        html: '<div style="animation: bounce 1s infinite; font-size: 32px; color: yellow;">📍</div>',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32]
+    });
 
     const floodZoneData = [
         { name: "Andheri Flooded", coords: [[19.120, 72.845], [19.120, 72.865], [19.110, 72.865], [19.110, 72.845]], alertLevel: "HIGH" },
@@ -105,7 +110,8 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
             await axios.post('http://localhost:3001/api/incidents', incidentData);
             alert('Simulated incident created!');
         } catch (error) {
-            console.error('Failed to create simulated incident:', error);
+            alert('Failed to report incident.');
+            console.error('Failed to report incident:', error);
         }
     };
 
@@ -138,6 +144,18 @@ const LiveMap = ({ incidents, shelters, selectedIncident }) => {
                             </Marker>
                         ))}
                     </LayerGroup>
+                )}
+
+                {/* NEW: Highlighted marker for the selected incident */}
+                {selectedIncident && (
+                    <Marker key={`selected-${selectedIncident.id}`} position={selectedIncident.coords} icon={selectedIcon}>
+                        <Popup>
+                            <b>SELECTED: {selectedIncident.name}</b><br/>
+                            <b>Priority:</b> {selectedIncident.priority}<br/>
+                            {selectedIncident.description}<br/>
+                            <b>Time:</b> {formatTime(selectedIncident.time)}
+                        </Popup>
+                    </Marker>
                 )}
 
                 {showingShelters && (
