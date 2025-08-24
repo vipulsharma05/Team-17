@@ -10,6 +10,7 @@ import Shelters from './components/Shelters';
 import Resources from './components/Resources';
 import GPSTracker from './components/GPSTracker';
 import SocialMediaTriage from './components/SocialMediaTriage';
+import Volunteers from './components/Volunteers';
 import './index.css';
 
 const App = () => {
@@ -48,8 +49,26 @@ const App = () => {
     useEffect(() => {
         fetchData();
         const interval = setInterval(fetchData, 30000); 
-        const ws = new WebSocket('ws://localhost:8080');
-        ws.onmessage = () => fetchData(); 
+        
+        // Fixed: Changed from port 8080 to 3001
+        const ws = new WebSocket('ws://localhost:3001');
+        
+        ws.onopen = () => {
+            console.log('Main WebSocket connection established');
+        };
+        
+        ws.onmessage = (event) => {
+            console.log('WebSocket message received:', event.data);
+            fetchData(); // Refresh data when receiving updates
+        };
+        
+        ws.onclose = () => {
+            console.log('Main WebSocket connection closed');
+        };
+        
+        ws.onerror = (error) => {
+            console.error('Main WebSocket error:', error);
+        };
         
         return () => {
             clearInterval(interval);
@@ -82,6 +101,8 @@ const App = () => {
                 return <GPSTracker />;
             case 'social-media':
                 return <SocialMediaTriage />;
+            case 'volunteers':
+                return <Volunteers />;
             default:
                 return <Dashboard incidents={incidents} shelters={shelters} resources={resources} weather={weather} />;
         }

@@ -1,140 +1,136 @@
 import React, { useState, useEffect } from 'react';
+import Chat from './Chat';
 import axios from 'axios';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 
-import Header from './components/Header';
-import Sidebar from './components/Sidebar';
-import RightPanel from './components/RightPanel';
-import Dashboard from './components/Dashboard';
-import LiveMap from './components/LiveMap';
-import Incidents from './components/Incidents';
-import Shelters from './components/Shelters';
-import Resources from './components/Resources';
-import GPSTracker from './components/GPSTracker';
-import SocialMediaTriage from './components/SocialMediaTriage';
-import Volunteers from './components/Volunteers';
+const Volunteers = () => {
+    const [volunteers, setVolunteers] = useState([]);
+    const [selectedVolunteer, setSelectedVolunteer] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [user] = useState({ uid: 'DDMA-Admin', name: 'DDMA Admin' });
 
-import './index.css';
-
-// Firebase imports
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-
-// Replace with your Firebase project config
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-const App = () => {
-    const [incidents, setIncidents] = useState([]);
-    const [shelters, setShelters] = useState([]);
-    const [resources, setResources] = useState([]);
-    const [weather, setWeather] = useState({});
-    const [apiStatus, setApiStatus] = useState('Initializing...');
-    const [activePanel, setActivePanel] = useState('dashboard');
-    const [liveAlerts, setLiveAlerts] = useState([]);
-    const [selectedIncident, setSelectedIncident] = useState(null);
-    const [user, setUser] = useState(null);
-
-    const fetchData = async () => {
-        try {
-            const [incidentsRes, sheltersRes, resourcesRes, weatherRes] = await Promise.all([
-                axios.get('http://localhost:3001/api/incidents'),
-                axios.get('http://localhost:3001/api/shelters'),
-                axios.get('http://localhost:3001/api/resources'),
-                axios.get('http://localhost:3001/api/weather')
-            ]);
-            setIncidents(incidentsRes.data);
-            setShelters(sheltersRes.data);
-            setResources(resourcesRes.data);
-            setWeather(weatherRes.data);
-            setApiStatus('Connected');
-            
-            const newAlerts = incidentsRes.data.filter(i => i.status === 'active');
-            setLiveAlerts(newAlerts);
-
-        } catch (error) {
-            console.error('Failed to fetch data:', error);
-            setApiStatus('Error');
-        }
-    };
-    
     useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 30000); 
-        
-        // Firebase Authentication
-        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-                setUser(currentUser);
-            } else {
-                signInAnonymously(auth);
+        const fetchVolunteers = async () => {
+            try {
+                setLoading(true);
+                const response = await axios.get('http://localhost:3001/api/volunteers');
+                setVolunteers(response.data);
+                if (response.data.length > 0) {
+                    setSelectedVolunteer(response.data[0]);
+                }
+                setError(null);
+            } catch (error) {
+                console.error('Failed to fetch volunteers:', error);
+                setError('Failed to load volunteers. Please check your server connection.');
+            } finally {
+                setLoading(false);
             }
-        });
-        
-        // WebSocket connection
-        const ws = new WebSocket('ws://localhost:8080');
-        ws.onmessage = () => fetchData(); 
-        
-        return () => {
-            clearInterval(interval);
-            ws.close();
-            unsubscribeAuth();
         };
+
+        fetchVolunteers();
     }, []);
 
-    const handlePanelChange = (panelId) => {
-        setActivePanel(panelId);
-    };
-    
-    const handleAlertClick = (incident) => {
-        setActivePanel('map');
-        setSelectedIncident(incident);
+    const handleSelectVolunteer = (volunteer) => {
+        setSelectedVolunteer(volunteer);
     };
 
-    const renderPanel = () => {
-        switch (activePanel) {
-            case 'dashboard':
-                return <Dashboard incidents={incidents} shelters={shelters} resources={resources} weather={weather} />;
-            case 'map':
-                return <LiveMap incidents={incidents} shelters={shelters} selectedIncident={selectedIncident} />;
-            case 'incidents':
-                return <Incidents incidents={incidents} />;
-            case 'shelters':
-                return <Shelters shelters={shelters} />;
-            case 'resources':
-                return <Resources resources={resources} />;
-            case 'gps-tracker':
-                return <GPSTracker />;
-            case 'social-media':
-                return <SocialMediaTriage />;
-            case 'volunteers': // New case
-                return <Volunteers user={user} db={db} />;
-            default:
-                return <Dashboard incidents={incidents} shelters={shelters} resources={resources} weather={weather} />;
-        }
-    };
+    if (loading) {
+        return (
+            <div className="content-panel active" id="volunteers" style={{ padding: '20px' }}>
+                <div>Loading volunteers...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="content-panel active" id="volunteers" style={{ padding: '20px' }}>
+                <div style={{ color: '#ef4444' }}>{error}</div>
+            </div>
+        );
+    }
 
     return (
-        <div className="dashboard">
-            <Header apiStatus={apiStatus} user={user} />
-            <Sidebar activePanel={activePanel} onPanelChange={handlePanelChange} />
-            <main className="main-content">
-                {renderPanel()}
-            </main>
-            <RightPanel liveAlerts={liveAlerts} onAlertClick={handleAlertClick} />
+        <div className="content-panel active" id="volunteers" style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+            <div className="sidebar" style={{ 
+                width: '250px', 
+                borderRight: '1px solid #475569', 
+                overflowY: 'auto',
+                padding: '10px',
+                background: '#1e293b'
+            }}>
+                <h3 className="panel-header" style={{ 
+                    margin: '0 0 20px 0', 
+                    padding: '10px 0', 
+                    borderBottom: '1px solid #475569',
+                    color: 'white'
+                }}>
+                    Online Volunteers ({volunteers.length})
+                </h3>
+                {volunteers.length === 0 ? (
+                    <div style={{ color: '#64748b', textAlign: 'center', marginTop: '20px' }}>
+                        No volunteers online
+                    </div>
+                ) : (
+                    volunteers.map(volunteer => (
+                        <div 
+                            key={volunteer.id}
+                            className={`nav-item ${selectedVolunteer?.id === volunteer.id ? 'active' : ''}`}
+                            onClick={() => handleSelectVolunteer(volunteer)}
+                            style={{
+                                padding: '12px',
+                                margin: '5px 0',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                background: selectedVolunteer?.id === volunteer.id ? '#3b82f6' : '#334155',
+                                color: 'white',
+                                transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (selectedVolunteer?.id !== volunteer.id) {
+                                    e.target.style.background = '#475569';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (selectedVolunteer?.id !== volunteer.id) {
+                                    e.target.style.background = '#334155';
+                                }
+                            }}
+                        >
+                            <span>{volunteer.name}</span>
+                            <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
+                                Online
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+            <div style={{ 
+                flexGrow: 1, 
+                padding: '20px', 
+                display: 'flex', 
+                flexDirection: 'column',
+                background: '#0f172a',
+                color: 'white'
+            }}>
+                {selectedVolunteer && user ? (
+                    <Chat chatId={selectedVolunteer.id} user={user} />
+                ) : (
+                    <div style={{ 
+                        textAlign: 'center', 
+                        color: '#64748b', 
+                        marginTop: '50px',
+                        fontSize: '16px'
+                    }}>
+                        {volunteers.length > 0 ? 
+                            'Select a volunteer to start a chat' : 
+                            'No volunteers available to chat with'
+                        }
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
 
-export default App;
+export default Volunteers;
