@@ -158,6 +158,8 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
         try {
             await axios.post('http://localhost:3001/api/incidents', incidentData);
             alert('Incident reported successfully!');
+            // Refresh incidents after reporting
+            fetchBackendIncidents();
         } catch (error) {
             alert('Failed to report incident.');
             console.error('Failed to report incident:', error);
@@ -182,6 +184,8 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
         try {
             await axios.post('http://localhost:3001/api/incidents', incidentData);
             alert('Simulated incident created!');
+            // Refresh incidents after adding
+            fetchBackendIncidents();
         } catch (error) {
             alert('Failed to report incident.');
             console.error('Failed to report incident:', error);
@@ -206,12 +210,6 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
         iconSize: [32, 32],
         iconAnchor: [16, 32]
     });
-
-    // Original flood zone data (fallback)
-    const floodZoneData = [
-        { name: "Andheri Flooded", coords: [[19.120, 72.845], [19.120, 72.865], [19.110, 72.865], [19.110, 72.845]], alertLevel: "HIGH" },
-        { name: "Bandra Flooded", coords: [[19.060, 72.810], [19.060, 72.830], [19.050, 72.830], [19.050, 72.810]], alertLevel: "MEDIUM" }
-    ];
 
     if (loading) {
         return (
@@ -240,6 +238,12 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                 }}></div>
                 <h3 style={{ margin: '0 0 10px 0', fontSize: '24px' }}>Loading Mumbai Flood Map...</h3>
                 <p style={{ margin: 0, fontSize: '16px', opacity: 0.8 }}>Fetching real-time data...</p>
+                <style jsx>{`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}</style>
             </div>
         );
     }
@@ -319,6 +323,45 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
             height: fullScreen ? '100vh' : '600px',
             width: fullScreen ? '100vw' : '100%'
         }}>
+            <style jsx>{`
+                @keyframes blink {
+                    0%, 50% { opacity: 1; }
+                    51%, 100% { opacity: 0.3; }
+                }
+                @keyframes bounce {
+                    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+                    40% { transform: translateY(-10px); }
+                    60% { transform: translateY(-5px); }
+                }
+                @keyframes pulse {
+                    0% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.7; transform: scale(1.1); }
+                    100% { opacity: 1; transform: scale(1); }
+                }
+                .popup-content h4 {
+                    margin: 0 0 10px 0;
+                    color: #333;
+                    font-size: 16px;
+                }
+                .popup-content p {
+                    margin: 5px 0;
+                    font-size: 14px;
+                    color: #666;
+                }
+                .status {
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin-left: 5px;
+                }
+                .status.active { background: #d4edda; color: #155724; }
+                .status.resolved { background: #f8d7da; color: #721c24; }
+                .severity.high { background: #f8d7da; color: #721c24; }
+                .severity.medium { background: #fff3cd; color: #856404; }
+                .severity.low { background: #d4edda; color: #155724; }
+            `}</style>
+            
             {/* Map Header with Controls */}
             <div style={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -377,7 +420,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                                     fontSize: '0.875rem',
                                     fontWeight: '500'
                                 }}>
-                                    🌊 {floodPolygons.length + floodZoneData.length} Flood Zones
+                                    🌊 {floodPolygons.length} Flood Zones
                                 </span>
                                 <span style={{
                                     background: 'rgba(255,255,255,0.2)', 
@@ -473,7 +516,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                     center={[19.0760, 72.8777]}
                     zoom={12}
                     scrollWheelZoom={true}
-                    whenCreated={setMapInstance}
+                    ref={setMapInstance}
                     style={{ height: '100%', width: '100%' }}
                     className="leaflet-container"
                 >
@@ -490,10 +533,12 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                             {allIncidents.filter(i => i.status === 'active').map(incident => (
                                 <Marker key={incident.id} position={incident.coords} icon={incidentIcon}>
                                     <Popup>
-                                        <b>{incident.name}</b><br/>
-                                        <b>Priority:</b> {incident.priority}<br/>
-                                        {incident.description}<br/>
-                                        <b>Time:</b> {formatTime(incident.time)}
+                                        <div className="popup-content">
+                                            <h4><b>{incident.name}</b></h4>
+                                            <p><b>Priority:</b> {incident.priority}</p>
+                                            <p>{incident.description}</p>
+                                            <p><b>Time:</b> {formatTime(incident.time)}</p>
+                                        </div>
                                     </Popup>
                                 </Marker>
                             ))}
@@ -506,6 +551,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                             <Marker 
                                 key={`backend-incident-${incident.id}`}
                                 position={[incident.lat, incident.lng]}
+                                icon={incidentIcon}
                             >
                                 <Popup>
                                     <div className="popup-content">
@@ -531,10 +577,12 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                     {selectedIncident && (
                         <Marker key={`selected-${selectedIncident.id}`} position={selectedIncident.coords} icon={selectedIcon}>
                             <Popup>
-                                <b>SELECTED: {selectedIncident.name}</b><br/>
-                                <b>Priority:</b> {selectedIncident.priority}<br/>
-                                {selectedIncident.description}<br/>
-                                <b>Time:</b> {formatTime(selectedIncident.time)}
+                                <div className="popup-content">
+                                    <h4><b>SELECTED: {selectedIncident.name}</b></h4>
+                                    <p><b>Priority:</b> {selectedIncident.priority}</p>
+                                    <p>{selectedIncident.description}</p>
+                                    <p><b>Time:</b> {formatTime(selectedIncident.time)}</p>
+                                </div>
                             </Popup>
                         </Marker>
                     )}
@@ -545,9 +593,11 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                             {shelters.map(shelter => (
                                 <Marker key={shelter.id} position={shelter.coords}>
                                     <Popup>
-                                        <b>{shelter.name}</b><br/>
-                                        <b>Capacity:</b> {shelter.current}/{shelter.capacity}<br/>
-                                        <b>Supplies:</b> {shelter.supplies.join(", ")}
+                                        <div className="popup-content">
+                                            <h4><b>{shelter.name}</b></h4>
+                                            <p><b>Capacity:</b> {shelter.current}/{shelter.capacity}</p>
+                                            <p><b>Supplies:</b> {shelter.supplies.join(", ")}</p>
+                                        </div>
                                     </Popup>
                                 </Marker>
                             ))}
@@ -596,36 +646,12 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                                     <div className="popup-content">
                                         <h4>🌊 Flood Zone #{floodZone.id + 1}</h4>
                                         <p><strong>Risk Level:</strong> High</p>
-                                        <p><strong>Type:</strong> Urban Flooding</p>
                                         <p><strong>Last Updated:</strong> {new Date().toLocaleString()}</p>
                                     </div>
                                 </Popup>
                             </Polygon>
                         ))
                     }
-
-                    {/* Original flood zones (fallback) */}
-                    {showingFloodZones && (activeLayer === 'floods' || activeLayer === 'all') && (
-                        <LayerGroup>
-                            {floodZoneData.map(zone => (
-                                <Polygon 
-                                    key={zone.name} 
-                                    positions={zone.coords} 
-                                    pathOptions={{ 
-                                        color: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', 
-                                        fillColor: zone.alertLevel === 'HIGH' ? '#e3342f' : '#f59e0b', 
-                                        fillOpacity: 0.6, 
-                                        weight: 2 
-                                    }}
-                                >
-                                    <Popup>
-                                        <b>Flooded Area: {zone.name}</b><br/>
-                                        <b>Alert Level:</b> {zone.alertLevel}
-                                    </Popup>
-                                </Polygon>
-                            ))}
-                        </LayerGroup>
-                    )}
 
                     {/* User location marker */}
                     {userLocation && (
@@ -839,7 +865,7 @@ const LiveMap = ({ incidents, shelters, selectedIncident, onBack, fullScreen = t
                                 border: '2px solid #ff4444'
                             }}></div>
                             <span style={{ fontSize: '14px', color: '#333', fontWeight: '500' }}>
-                                Flood Risk Areas ({floodPolygons.length + floodZoneData.length})
+                                Flood Risk Areas ({floodPolygons.length})
                             </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
